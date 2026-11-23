@@ -24,7 +24,7 @@ const (
 	favoriteTestDescription = "Тестовое объявление для проверки избранного"
 	favoriteTestPrice       = 1000
 	favoriteTestQuantity    = 1
-	missingAdvertisementID  = "00000000-0000-0000-0000-000000000000"
+	missingAdvertisementID  = "11111111-1111-4111-8111-111111111111"
 )
 
 type TestSuite struct {
@@ -164,18 +164,34 @@ func (s *TestSuite) TestFavoriteOwnAdvertisement() {
 	require.NotEmpty(t, gjson.Get(body, "message").String(), "для собственного объявления отсутствует сообщение об ошибке")
 }
 
-// TestFavoriteNonexistentAdvertisement проверяет добавление несуществующего объявления.
+// TestFavoriteNonexistentAdvertisement проверяет добавление удалённого объявления в избранное.
 func (s *TestSuite) TestFavoriteNonexistentAdvertisement() {
-	base.Precondition("Добавление несуществующего объявления в избранное")
-	body := favoritesManager.AddFavorite(s.T(), s.loginData.Token, missingAdvertisementID, http.StatusBadRequest)
-	require.NotEmpty(s.T(), gjson.Get(body, "message").String(), "для несуществующего объявления отсутствует сообщение об ошибке")
+	s.requireSecondUser()
+	t := s.T()
+
+	base.Precondition("Создание объявления для проверки добавления несуществующего объявления")
+	ad := s.createAd(t, s.secondLoginData.Token, "Deleted favorite")
+
+	require.NotEmpty(t, ad.ID, "при создании объявления получен пустой ID")
+
+	base.Precondition("Удаление объявления перед добавлением в избранное")
+	advertisements.DeleteAdvertisement(t, s.secondLoginData.Token, ad.ID)
+
+	base.Precondition("Добавление удалённого объявления в избранное")
+	body := favoritesManager.AddFavorite(t, s.loginData.Token, ad.ID, http.StatusNotFound)
+	require.Equal(t, "not_found", gjson.Get(body, "error").String())
+	require.Equal(t, "Advertisement not found", gjson.Get(body, "message").String())
 }
 
 // TestDeleteNonexistentFavorite проверяет удаление отсутствующего в избранном объявления.
 func (s *TestSuite) TestDeleteNonexistentFavorite() {
+	t := s.T()
+
 	base.Precondition("Удаление несуществующего объявления из избранного")
-	body := favoritesManager.DeleteFavorite(s.T(), s.loginData.Token, missingAdvertisementID, http.StatusNotFound)
-	require.NotEmpty(s.T(), gjson.Get(body, "message").String(), "для удаления несуществующего избранного отсутствует сообщение об ошибке")
+
+	body := favoritesManager.DeleteFavorite(t, s.loginData.Token, missingAdvertisementID, http.StatusNotFound)
+	require.Equal(t, "Advertisement not found", gjson.Get(body, "message").String())
+	require.Equal(t, "Favorite entry not found", gjson.Get(body, "message").String())
 }
 
 // проверяем GET, POST и DELETE без токена.
